@@ -1,13 +1,12 @@
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
-import { spawn } from "node:child_process";
-import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PasskeyAuth } from "./passkey-auth.js";
 import { FixedWindowLimiter } from "./security-controls.js";
+import { CodexProvider } from "./providers/codex-provider.js";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(root, "public");
@@ -34,12 +33,6 @@ const maxSseConnections = positiveIntegerEnv("MAX_SSE_CONNECTIONS", 50);
 const maxSseConnectionsPerIp = positiveIntegerEnv("MAX_SSE_CONNECTIONS_PER_IP", 5);
 const maxThreadUploadBytes = positiveIntegerEnv("MAX_THREAD_UPLOAD_MB", 64) * 1024 * 1024;
 const maxTotalUploadBytes = positiveIntegerEnv("MAX_TOTAL_UPLOAD_MB", 512) * 1024 * 1024;
-const rpcTimeoutMs = 120_000;
-
-let nextId = 1;
-let child;
-let readyPromise;
-const pending = new Map();
 const approvals = new Map();
 const clients = new Set();
 const threads = new Map();
@@ -154,32 +147,6 @@ function virtualWorkspacePath(path) {
   return child ? `/${child}` : "/";
 }
 
-function send(message) {
-  child.stdin.write(`${JSON.stringify(message)}\n`);
-}
-
-function request(method, params) {
-  return new Promise((resolve, reject) => {
-    const id = nextId++;
-    const timeout = setTimeout(() => {
-      pending.delete(id);
-      reject(new Error(`Codex request timed out: ${method}`));
-    }, rpcTimeoutMs);
-    timeout.unref();
-    pending.set(id, {
-      resolve: (value) => {
-        clearTimeout(timeout);
-        resolve(value);
-      },
-      reject: (error) => {
-        clearTimeout(timeout);
-        reject(error);
-      },
-    });
-    send({ method, id, params });
-  });
-}
-
 async function pathIsInWorkspace(value) {
   if (!value) return false;
   try {
@@ -206,20 +173,11 @@ async function requestsWorkspaceExpansion(message) {
 }
 
 async function handleMessage(message) {
-  if (message.id !== undefined && !message.method) {
-    const waiter = pending.get(message.id);
-    if (!waiter) return;
-    pending.delete(message.id);
-    if (message.error) waiter.reject(new Error(message.error.message));
-    else waiter.resolve(message.result);
-    return;
-  }
-
   if (message.id !== undefined && message.method) {
     if (message.method.endsWith("requestApproval")) {
       const threadId = message.params?.threadId;
       if (await requestsWorkspaceExpansion(message)) {
-        send({ id: message.id, result: { decision: "decline" } });
+        provider.resolveApproval(message.id, "decline");
         broadcast("log", "Blocked a request for filesystem access outside workspace", threadId);
         return;
       }
@@ -227,7 +185,7 @@ async function handleMessage(message) {
       broadcast("approval", { requestId: String(message.id), allowPersistent: persistentApprovalsEnabled, ...message }, threadId);
       return;
     }
-    send({ id: message.id, error: { code: -32601, message: "Unsupported request" } });
+    provider.rejectRequest(message.id);
     return;
   }
 
@@ -245,36 +203,14 @@ async function handleMessage(message) {
   broadcast("codex", message, params.threadId);
 }
 
-async function ensureCodex() {
-  if (readyPromise) return readyPromise;
-  readyPromise = (async () => {
-    await mkdir(sessionRoot, { recursive: true });
-    child = spawn(codexBin, ["app-server"], {
-      cwd: workspace,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    child.stderr.on("data", (chunk) => broadcast("log", chunk.toString()));
-    child.on("error", (error) => broadcast("fatal", error.message));
-    child.on("exit", (code) => {
-      broadcast("fatal", `Codex app-server exited (${code})`);
-      for (const waiter of pending.values()) waiter.reject(new Error("Codex app-server exited"));
-      pending.clear();
-      readyPromise = null;
-    });
-    createInterface({ input: child.stdout }).on("line", async (line) => {
-      try {
-        await handleMessage(JSON.parse(line));
-      } catch {
-        broadcast("log", line);
-      }
-    });
-    await request("initialize", {
-      clientInfo: { name: "codex_remote_console", title: "Codex Remote Console", version: "0.1.0" },
-    });
-    send({ method: "initialized", params: {} });
-  })();
-  return readyPromise;
-}
+const provider = new CodexProvider({
+  binary: codexBin,
+  workspace,
+  sessionRoot,
+  onMessage: handleMessage,
+  onLog: (message) => broadcast("log", message),
+  onFatal: (message) => broadcast("fatal", message),
+});
 
 function requiredThreadId(value) {
   const threadId = value?.trim();
@@ -415,7 +351,7 @@ async function authApi(requestObject, response, url, access) {
 }
 
 async function api(requestObject, response, url) {
-  await ensureCodex();
+  await provider.start();
   if (requestObject.method === "POST" && url.pathname === "/api/uploads") {
     const body = await readBody(requestObject, 12_000_000);
     const threadId = requiredThreadId(body.threadId);
@@ -499,12 +435,7 @@ async function api(requestObject, response, url) {
   }
   if (requestObject.method === "GET" && url.pathname === "/api/threads") {
     await loadManagedThreads();
-    const result = await request("thread/list", {
-      limit: 100,
-      sortKey: "updated_at",
-      sortDirection: "desc",
-      sourceKinds: ["cli", "vscode", "exec", "appServer", "unknown"],
-    });
+    const result = await provider.listSessions();
     const listedIds = new Set(result.data.map((thread) => thread.id));
     const loadedOnly = [...threads.values()]
       .map((state) => state.snapshot)
@@ -521,13 +452,7 @@ async function api(requestObject, response, url) {
     await loadManagedThreads();
     const body = await readBody(requestObject);
     const cwd = await resolveSessionDirectory(body.cwd);
-    const result = await request("thread/start", {
-      cwd,
-      approvalPolicy: "on-request",
-      sandbox: "workspace-write",
-      runtimeWorkspaceRoots: [sessionRoot],
-      serviceName: "codex_remote_console",
-    });
+    const result = await provider.createSession(cwd);
     const state = threadState(result.thread.id);
     state.snapshot = result.thread;
     managedThreadIds.add(result.thread.id);
@@ -540,8 +465,7 @@ async function api(requestObject, response, url) {
     const threadId = requiredThreadId(body.threadId);
     const state = threads.get(threadId);
     if (state?.active) return json(response, 409, { error: "Stop this session before deleting it" });
-    await request("thread/unsubscribe", { threadId });
-    await request("thread/delete", { threadId });
+    await provider.deleteSession(threadId);
     await rm(join(uploadDir, threadId), { recursive: true, force: true });
     threads.delete(threadId);
     managedThreadIds.delete(threadId);
@@ -556,7 +480,7 @@ async function api(requestObject, response, url) {
     const threadId = requiredThreadId(body.threadId);
     const state = threadState(threadId);
     if (!state.snapshot) {
-      const result = await request("thread/resume", { threadId });
+      const result = await provider.resumeSession(threadId);
       await requireThreadWorkspace(result.thread);
       state.snapshot = result.thread;
       state.active = result.thread.status?.type === "active";
@@ -568,7 +492,7 @@ async function api(requestObject, response, url) {
     const threadId = requiredThreadId(url.searchParams.get("threadId"));
     const state = threadState(threadId);
     try {
-      const result = await request("thread/read", { threadId, includeTurns: true });
+      const result = await provider.readSession(threadId);
       await requireThreadWorkspace(result.thread);
       state.snapshot = result.thread;
       state.active = result.thread.status?.type === "active" || state.active;
@@ -578,10 +502,10 @@ async function api(requestObject, response, url) {
     return json(response, 200, { ...publicThreadState(threadId), thread: { ...state.snapshot, turns: state.snapshot?.turns || [] } });
   }
   if (requestObject.method === "GET" && url.pathname === "/api/models") {
-    return json(response, 200, await request("model/list", { limit: 100 }));
+    return json(response, 200, await provider.listModels());
   }
   if (requestObject.method === "GET" && url.pathname === "/api/rate-limits") {
-    return json(response, 200, await request("account/rateLimits/read"));
+    return json(response, 200, await provider.readRateLimits());
   }
   if (requestObject.method === "GET" && url.pathname === "/api/events") {
     const threadId = requiredThreadId(url.searchParams.get("threadId"));
@@ -633,7 +557,7 @@ async function api(requestObject, response, url) {
     if (body.clientUserMessageId) params.clientUserMessageId = body.clientUserMessageId;
     if (body.model) params.model = body.model;
     if (body.effort) params.effort = body.effort;
-    const result = await request("turn/start", params);
+    const result = await provider.startTurn(params);
     return json(response, 202, result);
   }
   if (requestObject.method === "POST" && url.pathname === "/api/interrupt") {
@@ -641,7 +565,7 @@ async function api(requestObject, response, url) {
     const threadId = requiredThreadId(body.threadId);
     const state = threadState(threadId);
     if (!state.activeTurnId) return json(response, 409, { error: "No active turn" });
-    await request("turn/interrupt", { threadId, turnId: state.activeTurnId });
+    await provider.interruptTurn(threadId, state.activeTurnId);
     return json(response, 200, { ok: true });
   }
   if (requestObject.method === "POST" && url.pathname === "/api/approvals") {
@@ -654,7 +578,7 @@ async function api(requestObject, response, url) {
       return json(response, 400, { error: "Invalid decision" });
     }
     approvals.delete(String(body.requestId));
-    send({ id: approval.id, result: { decision: body.decision } });
+    provider.resolveApproval(approval.id, body.decision);
     broadcast("approval-resolved", { requestId: String(body.requestId) }, approval.threadId);
     return json(response, 200, { ok: true });
   }
@@ -752,7 +676,7 @@ if (authEnabled) {
 }
 
 function shutdown() {
-  child?.kill("SIGTERM");
+  provider.stop();
   publicServer.close();
 }
 

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "bash -n server.sh && node --check server.js && node --check log-runner.js && node --check passkey-auth.js && node --check security-controls.js && node --check public/app.js && node --check public/sessions.js && node --check public/login.js && node --check public/pair.js && node --check public/passkey-client.js && node --test test/*.test.js"
+    "test": "bash -n server.sh && node --check server.js && node --check log-runner.js && node --check passkey-auth.js && node --check security-controls.js && node --check providers/codex-provider.js && node --check public/app.js && node --check public/sessions.js && node --check public/login.js && node --check public/pair.js && node --check public/passkey-client.js && node --test test/*.test.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.3.2"
