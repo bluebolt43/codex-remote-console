@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0d1117">
+    <title>Codex Session</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <main class="app chat-app">
+      <header class="topbar">
+        <div class="brand">
+          <a class="back-link" href="/" aria-label="Back to sessions">‹</a>
+          <div><h1>CODEX</h1><p data-i18n="remoteSession">remote session</p></div>
+        </div>
+        <span id="status" class="status"><i></i> offline</span>
+      </header>
+      <section id="messages" class="messages" aria-live="polite">
+        <div id="empty" class="empty-state"><span>›_</span><strong data-i18n="readyInstructions">Ready for instructions</strong><p data-i18n="emptyHint">輸入工作內容，Codex 會在目前專案中執行。</p></div>
+      </section>
+      <section id="approval" class="approval hidden"></section>
+      <form id="composer" class="composer">
+        <div id="attachment-preview" class="attachment-preview hidden"></div>
+        <div class="input-shell"><button id="attach" type="button" class="attach-button" title="新增圖片" aria-label="新增圖片">📎</button><input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden><span>›</span><textarea id="prompt" rows="2" placeholder="Ask Codex to work on this project…"></textarea></div>
+        <div class="command-bar">
+          <label class="compact-control"><span>Model</span><select id="model" aria-label="Model"><option value="">Default</option></select></label>
+          <label class="compact-control"><span>Reasoning</span><select id="effort" aria-label="Reasoning"><option value="">Default</option><option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option><option>ultra</option></select></label>
+          <div class="weekly" title="Weekly remaining"><span>Weekly</span><strong id="weekly">--</strong></div>
+          <button id="quick-prompt" type="button" class="quick-button" data-prompt="continue">continue</button>
+          <button id="stop" type="button" class="stop-button" disabled data-i18n="stop">中斷</button>
+          <button id="send" type="submit" class="send-button" data-i18n="send">送出 ↑</button>
+        </div>
+      </form>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
