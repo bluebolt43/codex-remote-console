@@ -136,6 +136,23 @@ button:disabled { opacity: .38; }
 .setting-field { display: grid; gap: 6px; color: var(--muted); font-size: .7rem; }
 .setting-field input, .setting-field select { min-width: 0; border: 1px solid var(--line); border-radius: 7px; padding: 10px; background: #080a0c; color: var(--text); font: inherit; }
 .setting-field small { color: #5f666d; }
+.setting-field output { padding: 9px 0; color: #c9cdd1; font-size: .78rem; }
+.security-activity { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.security-activity > strong { font-size: .72rem; }
+#security-events { display: grid; gap: 6px; color: var(--muted); font-size: .68rem; }
+.security-list { display: grid; gap: 6px; }
+.security-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
+.security-item > div { display: grid; gap: 3px; min-width: 0; }
+.security-item strong, .security-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.security-item strong { color: #c9cdd1; font-size: .7rem; }
+.security-item small { color: #5f666d; font-size: .65rem; }
+.security-item button { min-height: 34px; color: #ff8b82; }
+.security-event { display: grid; gap: 3px; padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
+.security-event strong { color: var(--green); font-size: .68rem; }
+.security-event.failure strong { color: #ff8b82; }
+.security-event.alert { border-color: #ff8b82; background: #ff8b820d; }
+.security-event span, .security-event small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.security-event small { color: #5f666d; }
 
 @media (max-width: 430px) {
   .app { padding-left: 9px; padding-right: 9px; }
@@ -143,4 +160,46 @@ button:disabled { opacity: .38; }
   .compact-control, .weekly { padding-left: 5px; padding-right: 5px; }
   button { min-width: 45px; padding-left: 5px; padding-right: 5px; }
   .quick-button { font-size: .62rem; }
+}
+.login-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  background: #0d1117;
+}
+
+.login-card {
+  width: min(100%, 380px);
+  padding: clamp(20px, 6vw, 28px);
+  border: 1px solid #30363d;
+  border-radius: 14px;
+  background: #161b22;
+  box-shadow: 0 18px 60px rgb(0 0 0 / 35%);
+}
+
+.login-card .brand-mark { width: 44px; height: 44px; }
+.login-card h1 { font-size: clamp(.95rem, 4vw, 1.1rem); }
+.login-card form, .login-card #login-form { display: grid; gap: 14px; margin-top: clamp(22px, 7vw, 30px); }
+.login-card label { color: #c9cdd1; font-family: system-ui, sans-serif; font-size: .84rem; line-height: 1.4; }
+.login-card input {
+  width: 100%;
+  min-height: 50px;
+  padding: 10px 12px;
+  border: 1px solid #3a4148;
+  border-radius: 9px;
+  outline: 0;
+  background: #080a0c;
+  color: #f0f2f4;
+  font: 1rem ui-monospace, monospace;
+}
+.login-card input:focus { border-color: var(--green); box-shadow: 0 0 0 3px #39d98a1f; }
+.login-card #pair-code { font-size: clamp(1.25rem, 7vw, 1.65rem); letter-spacing: .2em; text-align: center; }
+.login-card .send-button { width: 100%; min-height: 48px; margin-top: 2px; border-radius: 9px; font-size: .82rem; }
+.login-card p { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.55; }
+.login-card .manager-error { padding: 4px 0 0; }
+.pair-link { padding: 6px; color: var(--blue); font-size: .78rem; text-align: center; }
+
+@media (max-height: 520px) {
+  .login-page { place-items: start center; }
 }

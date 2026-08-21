@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0d1117">
+    <title>Pair device · Codex Remote Console</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body class="login-page">
+    <main class="login-card">
+      <div class="brand"><span class="brand-mark">›_</span><div><h1>PAIR DEVICE</h1><p>Codex Remote Console</p></div></div>
+      <form id="pair-form">
+        <label id="pair-code-label" for="pair-code">One-time password shown by server.sh pair</label>
+        <input id="pair-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+        <button id="pair-button" class="send-button" type="submit">Create Passkey</button>
+        <p id="pair-error" class="manager-error hidden" role="alert"></p>
+      </form>
+    </main>
+    <script type="module" src="/pair.js"></script>
+  </body>
+</html>

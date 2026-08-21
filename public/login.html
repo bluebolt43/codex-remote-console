@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0d1117">
+    <title>Sign in · Codex Remote Console</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body class="login-page">
+    <main class="login-card">
+      <div class="brand"><span class="brand-mark">›_</span><div><h1>CODEX</h1><p>remote console</p></div></div>
+      <div id="login-form">
+        <p id="login-instruction">Sign in with a paired Passkey.</p>
+        <button id="login-button" class="send-button" type="button">Sign in with Passkey</button>
+        <a id="pair-link" class="pair-link" href="/pair.html">Create a new Passkey</a>
+        <p id="login-error" class="manager-error hidden" role="alert"></p>
+      </div>
+    </main>
+    <script type="module" src="/login.js"></script>
+  </body>
+</html>

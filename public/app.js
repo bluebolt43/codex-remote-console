@@ -249,11 +249,10 @@ events.addEventListener("approval", (event) => {
   const options = document.createElement("div");
   options.className = "approval-options";
   approval.append(title, pre, options);
-  for (const [key, label, hint, decision] of [
-    ["1", t.yes, t.yesHint, "accept"],
-    ["2", t.alwaysYes, t.alwaysYesHint, "acceptForSession"],
-    ["3", t.no, t.noHint, "decline"],
-  ]) {
+  const choices = [["1", t.yes, t.yesHint, "accept"]];
+  if (request.allowPersistent) choices.push(["2", t.alwaysYes, t.alwaysYesHint, "acceptForSession"]);
+  choices.push([request.allowPersistent ? "3" : "2", t.no, t.noHint, "decline"]);
+  for (const [key, label, hint, decision] of choices) {
     const button = document.createElement("button");
     button.className = "approval-choice";
     button.dataset.decision = decision;

@@ -11,7 +11,7 @@
     <main class="app manager-app">
       <header class="topbar">
         <div class="brand"><span class="brand-mark">›_</span><div><h1>CODEX</h1><p data-i18n="managerSubtitle">session manager</p></div></div>
-        <div class="topbar-actions"><button id="settings" type="button" data-i18n="settings">Settings</button><button id="new-session" class="new-session" type="button" data-i18n="newSession">＋ New</button></div>
+        <div class="topbar-actions"><button id="logout" type="button" data-i18n="logout">Logout</button><button id="settings" type="button" data-i18n="settings">Settings</button><button id="new-session" class="new-session" type="button" data-i18n="newSession">＋ New</button></div>
       </header>
       <section class="manager-heading"><div><strong data-i18n="sessions">Sessions</strong><span id="session-count">—</span></div><button id="refresh" type="button" data-i18n="refresh">Refresh</button></section>
       <section id="session-list" class="session-list" aria-live="polite"></section>
@@ -31,6 +31,19 @@
           <label class="setting-field"><span data-i18n="language">Language</span><select id="language"><option value="en">English</option><option value="zh-Hant">繁體中文</option></select></label>
           <label class="setting-field"><span data-i18n="workspaceRoot">Workspace root</span><input value="TODO" disabled><small data-i18n="workspaceTodo">此設定目前暫不支援</small></label>
           <label class="setting-field"><span data-i18n="customButtonText">Custom button text</span><input id="custom-prompt" placeholder="continue" value="continue"></label>
+          <div id="last-login-setting" class="setting-field"><span data-i18n="lastLogin">Last successful login</span><output id="last-login">—</output></div>
+          <section id="device-management" class="security-activity hidden">
+            <strong data-i18n="pairedDevices">Paired devices</strong>
+            <div id="paired-devices" class="security-list"></div>
+          </section>
+          <section id="session-management" class="security-activity hidden">
+            <strong data-i18n="activeSessions">Active login sessions</strong>
+            <div id="active-sessions" class="security-list"></div>
+          </section>
+          <section id="security-activity" class="security-activity">
+            <strong data-i18n="recentLogins">Recent login activity</strong>
+            <div id="security-events"></div>
+          </section>
           <footer><button value="cancel" data-i18n="cancel">Cancel</button><button id="save-settings" type="button" class="send-button" data-i18n="save">Save</button></footer>
         </form>
       </dialog>
