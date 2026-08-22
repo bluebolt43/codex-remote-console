@@ -81,6 +81,7 @@ export class CodexProvider {
       });
       await this.request("initialize", {
         clientInfo: { name: "codex_remote_console", title: "Codex Remote Console", version: "0.1.0" },
+        capabilities: { experimentalApi: true },
       });
       this.send({ method: "initialized", params: {} });
     })();
@@ -112,11 +113,21 @@ export class CodexProvider {
   }
 
   resumeSession(threadId) {
-    return this.request("thread/resume", { threadId });
+    return this.request("thread/resume", { threadId, doNotPopulateTurns: true });
   }
 
   readSession(threadId) {
-    return this.request("thread/read", { threadId, includeTurns: true });
+    return this.request("thread/read", { threadId, includeTurns: false });
+  }
+
+  listTurns(threadId, cursor, limit) {
+    return this.request("thread/turns/list", {
+      threadId,
+      cursor,
+      limit,
+      sortDirection: "desc",
+      itemsView: "summary",
+    });
   }
 
   listModels() {

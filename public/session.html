@@ -14,15 +14,20 @@
           <a class="back-link" href="/" aria-label="Back to sessions">‹</a>
           <div><h1>CODEX</h1><p data-i18n="remoteSession">remote session</p></div>
         </div>
-        <span id="status" class="status"><i></i> offline</span>
+        <div class="session-actions">
+          <button id="browse-files" type="button" class="file-browser-button" data-i18n="files">Files</button>
+          <span id="status" class="status"><i></i> offline</span>
+        </div>
       </header>
       <section id="messages" class="messages" aria-live="polite">
+        <div id="history" class="history"></div>
+        <div id="live" class="live-messages"></div>
         <div id="empty" class="empty-state"><span>›_</span><strong data-i18n="readyInstructions">Ready for instructions</strong><p data-i18n="emptyHint">輸入工作內容，Codex 會在目前專案中執行。</p></div>
       </section>
       <section id="approval" class="approval hidden"></section>
       <form id="composer" class="composer">
         <div id="attachment-preview" class="attachment-preview hidden"></div>
-        <div class="input-shell"><button id="attach" type="button" class="attach-button" title="新增圖片" aria-label="新增圖片">📎</button><input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden><span>›</span><textarea id="prompt" rows="2" placeholder="Ask Codex to work on this project…"></textarea></div>
+        <div class="input-shell"><button id="attach" type="button" class="attach-button" title="新增圖片" aria-label="新增圖片">📎</button><input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden><button id="voice" type="button" class="voice-button hidden">🎙</button><span>›</span><textarea id="prompt" rows="2" placeholder="Ask Codex to work on this project…"></textarea></div>
         <div class="command-bar">
           <label class="compact-control"><span>Model</span><select id="model" aria-label="Model"><option value="">Default</option></select></label>
           <label class="compact-control"><span>Reasoning</span><select id="effort" aria-label="Reasoning"><option value="">Default</option><option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option><option>ultra</option></select></label>
@@ -33,6 +38,15 @@
         </div>
       </form>
     </main>
+    <dialog id="file-browser" class="file-browser">
+      <section class="file-browser-panel">
+        <header><strong data-i18n="workspaceFiles">Workspace files</strong><button id="close-files" type="button" aria-label="Close">×</button></header>
+        <div class="file-browser-path"><button id="file-up" type="button" aria-label="Parent folder">↑</button><code id="file-path">/</code></div>
+        <div id="file-error" class="file-error hidden"></div>
+        <div id="file-list" class="file-list"></div>
+        <figure id="file-preview" class="file-preview hidden"><img alt=""><figcaption></figcaption></figure>
+      </section>
+    </dialog>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

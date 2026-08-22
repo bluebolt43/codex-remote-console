@@ -1,3 +1,5 @@
+import { localeByLanguage, readSettings, sessionTranslations, settingsKey } from "./i18n.js";
+
 const list = document.querySelector("#session-list");
 const count = document.querySelector("#session-count");
 const error = document.querySelector("#manager-error");
@@ -25,22 +27,9 @@ const pairedDevices = document.querySelector("#paired-devices");
 const sessionManagement = document.querySelector("#session-management");
 const activeSessions = document.querySelector("#active-sessions");
 let parentPath = null;
-const settingsKey = "codex-remote-console-settings";
-const translations = {
-  en: { managerSubtitle: "session manager", logout: "Logout", settings: "Settings", newSession: "＋ New", sessions: "Sessions", refresh: "Refresh", chooseWorkspace: "Choose workspace", newFolderName: "New folder name", newFolder: "＋ Folder", cancel: "Cancel", createSession: "Create session", language: "Language", workspaceRoot: "Workspace root", workspaceTodo: "This setting is not supported yet", customButtonText: "Custom button text", lastLogin: "Last successful login", pairedDevices: "Paired devices", activeSessions: "Active login sessions", recentLogins: "Recent login activity", current: "Current", revoke: "Revoke", save: "Save", noActivity: "No activity yet", newSessionTitle: "New session", delete: "Delete", stopBeforeDelete: "Stop this session before deleting it", deleteTitle: "Permanently delete this session", deleteConfirm: (title) => `Permanently delete “${title}”?\n\nThis cannot be undone.`, deleteFailed: "Delete failed", empty: "No sessions yet", saveFailed: "Could not save settings" },
-  "zh-Hant": { managerSubtitle: "Session 管理", logout: "登出", settings: "設定", newSession: "＋ 新增", sessions: "Sessions", refresh: "重新整理", chooseWorkspace: "選擇工作目錄", newFolderName: "新資料夾名稱", newFolder: "＋ 資料夾", cancel: "取消", createSession: "建立 Session", language: "語言", workspaceRoot: "Workspace 根目錄", workspaceTodo: "此設定目前暫不支援", customButtonText: "自訂按鈕文字", lastLogin: "最後一次成功登入", pairedDevices: "已配對裝置", activeSessions: "登入中的 Sessions", recentLogins: "最近登入活動", current: "目前使用中", revoke: "撤銷", save: "儲存", noActivity: "尚無活動", newSessionTitle: "新 Session", delete: "刪除", stopBeforeDelete: "請先中斷此 Session", deleteTitle: "永久刪除此 Session", deleteConfirm: (title) => `永久刪除「${title}」？\n\n此動作無法復原。`, deleteFailed: "刪除失敗", empty: "尚未建立 Session", saveFailed: "設定儲存失敗" },
-};
-
-function readSettings() {
-  try {
-    return { language: "zh-Hant", customPrompt: "continue", ...JSON.parse(localStorage.getItem(settingsKey)) };
-  } catch {
-    return { language: "zh-Hant", customPrompt: "continue" };
-  }
-}
-
 const activeLanguage = readSettings().language;
-const t = translations[activeLanguage] || translations["zh-Hant"];
+const t = sessionTranslations[activeLanguage] || sessionTranslations["zh-Hant"];
+const locale = localeByLanguage[activeLanguage] || "zh-TW";
 document.documentElement.lang = activeLanguage;
 for (const element of document.querySelectorAll("[data-i18n]")) element.textContent = t[element.dataset.i18n];
 for (const element of document.querySelectorAll("[data-i18n-placeholder]")) element.placeholder = t[element.dataset.i18nPlaceholder];
@@ -54,7 +43,7 @@ async function api(path, options) {
 
 function formatTime(value) {
   if (!value) return t.noActivity;
-  return new Intl.DateTimeFormat(activeLanguage === "en" ? "en" : "zh-TW", { dateStyle: "short", timeStyle: "short" }).format(new Date(value * 1000));
+  return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(new Date(value * 1000));
 }
 
 function describeBrowser(userAgent) {
@@ -63,13 +52,13 @@ function describeBrowser(userAgent) {
     : value.match(/Chrome\/(\d+)/) ? `Chrome ${value.match(/Chrome\/(\d+)/)[1]}`
       : value.match(/Firefox\/(\d+)/) ? `Firefox ${value.match(/Firefox\/(\d+)/)[1]}`
         : value.match(/Version\/(\d+).*Safari/) ? `Safari ${value.match(/Version\/(\d+).*Safari/)[1]}`
-          : (activeLanguage === "en" ? "Unknown browser" : "未知瀏覽器");
+          : t.unknownBrowser;
   const platform = /Android/.test(value) ? "Android"
     : /Windows/.test(value) ? "Windows"
       : /iPhone|iPad/.test(value) ? "iOS"
         : /Macintosh/.test(value) ? "macOS"
           : /Linux/.test(value) ? "Linux"
-            : (activeLanguage === "en" ? "Unknown OS" : "未知系統");
+            : t.unknownOS;
   return `${browser} · ${platform}`;
 }
 
@@ -79,7 +68,7 @@ function describeAddress(address) {
     || /^172\.(1[6-9]|2\d|3[01])\./.test(value)
     || value === "::1" || /^f[cd][0-9a-f]{2}:/i.test(value);
   if (!privateAddress) return value;
-  return activeLanguage === "en" ? `LAN via router (${value})` : `經由區網路由器 (${value})`;
+  return t.lanViaRouter(value);
 }
 
 function securityItem(title, detail, current, revoke) {
@@ -199,31 +188,28 @@ settings.addEventListener("click", async () => {
   deviceManagement.classList.toggle("hidden", !authStatus.enabled);
   sessionManagement.classList.toggle("hidden", !authStatus.enabled);
   lastLogin.textContent = authStatus.lastLoginAt
-    ? new Intl.DateTimeFormat(activeLanguage === "en" ? "en" : "zh-TW", { dateStyle: "medium", timeStyle: "medium" }).format(new Date(authStatus.lastLoginAt))
+    ? new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "medium" }).format(new Date(authStatus.lastLoginAt))
     : t.noActivity;
   const [activity, devices, sessions] = authStatus.enabled
     ? await Promise.all([api("/api/auth/security-events"), api("/api/auth/devices"), api("/api/auth/sessions")])
     : [{ events: [] }, { devices: [] }, { sessions: [] }];
   pairedDevices.replaceChildren(...devices.devices.map((device) => securityItem(
     device.name,
-    `${device.sessionCount} session · ${device.lastUsedAt ? new Date(device.lastUsedAt).toLocaleString() : t.noActivity}`,
+    `${device.sessionCount} ${t.sessionUnit} · ${device.lastUsedAt ? new Date(device.lastUsedAt).toLocaleString(locale) : t.noActivity}`,
     device.current,
     () => api("/api/auth/devices", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ deviceId: device.id }) }),
   )));
   activeSessions.replaceChildren(...sessions.sessions.map((session) => securityItem(
     describeBrowser(session.userAgent),
-    `${describeAddress(session.ip)} · ${new Date(session.lastSeenAt).toLocaleString()}`,
+    `${describeAddress(session.ip)} · ${new Date(session.lastSeenAt).toLocaleString(locale)}`,
     session.current,
     () => api("/api/auth/sessions", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ sessionId: session.id }) }),
   )));
   securityEvents.replaceChildren(...activity.events.map((event) => {
     const row = document.createElement("div");
     row.className = `security-event ${event.success ? "success" : "failure"}${event.alert ? " alert" : ""}`;
-    const labels = activeLanguage === "en"
-      ? { pairing: "Device paired", login: "Login", "login-new-address": "Login from new address", "login-blocked": "Login address blocked", "device-revoked": "Device revoked", "session-revoked": "Session revoked" }
-      : { pairing: "裝置配對", login: "登入", "login-new-address": "從新 IP 登入", "login-blocked": "登入 IP 已封鎖", "device-revoked": "裝置已撤銷", "session-revoked": "登入 Session 已撤銷" };
-    const status = `${labels[event.type] || event.type} · ${event.success ? (activeLanguage === "en" ? "Success" : "成功") : (activeLanguage === "en" ? "Failed" : "失敗")}`;
-    const time = new Intl.DateTimeFormat(activeLanguage === "en" ? "en" : "zh-TW", { dateStyle: "short", timeStyle: "medium" }).format(new Date(event.timestamp));
+    const status = `${t.eventLabels[event.type] || event.type} · ${event.success ? t.success : t.failed}`;
+    const time = new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "medium" }).format(new Date(event.timestamp));
     row.innerHTML = `<strong></strong><span></span><small></small>`;
     row.querySelector("strong").textContent = status;
     row.querySelector("span").textContent = `${time} · ${describeAddress(event.ip)}`;

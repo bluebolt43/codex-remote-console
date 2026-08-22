@@ -1,22 +1,12 @@
 import { getPasskey } from "./passkey-client.js";
+import { authPageLanguage, loginTranslations } from "./i18n.js";
 
 const button = document.querySelector("#login-button");
 const instruction = document.querySelector("#login-instruction");
 const pairLink = document.querySelector("#pair-link");
 const error = document.querySelector("#login-error");
-const savedLanguage = (() => {
-  try {
-    return JSON.parse(localStorage.getItem("codex-remote-console-settings"))?.language;
-  } catch {
-    return null;
-  }
-})();
-const language = savedLanguage || (navigator.language.toLowerCase().startsWith("zh") ? "zh-Hant" : "en");
-const translations = {
-  en: { title: "Sign in", instruction: "Sign in with a paired Passkey.", login: "Sign in with Passkey", pair: "Create a new Passkey" },
-  "zh-Hant": { title: "登入", instruction: "使用已配對的 Passkey 登入。", login: "使用 Passkey 登入", pair: "建立新的 Passkey" },
-};
-const text = translations[language] || translations.en;
+const language = authPageLanguage();
+const text = loginTranslations[language] || loginTranslations.en;
 document.documentElement.lang = language;
 document.title = `${text.title} · Codex Remote Console`;
 instruction.textContent = text.instruction;

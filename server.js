@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { PasskeyAuth } from "./passkey-auth.js";
 import { FixedWindowLimiter } from "./security-controls.js";
 import { CodexProvider } from "./providers/codex-provider.js";
+import { isPairingAsset, isUnauthenticatedAsset } from "./auth-assets.js";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(root, "public");
@@ -142,6 +143,24 @@ async function requireThreadWorkspace(thread) {
   return thread;
 }
 
+async function resolveThreadWorkspacePath(threadId, value) {
+  const state = threads.get(threadId);
+  if (!state?.snapshot?.cwd) throw httpError("Session is not loaded", 409);
+  const cwd = await realpath(state.snapshot.cwd);
+  const virtualPath = String(value || "/");
+  if (!virtualPath.startsWith("/")) throw new Error("File path must start with /");
+  const requested = resolve(cwd, `.${virtualPath}`);
+  if (requested !== cwd && !requested.startsWith(`${cwd}/`)) throw new Error("Cannot browse above the session workspace");
+  const path = await realpath(requested);
+  if (path !== cwd && !path.startsWith(`${cwd}/`)) throw new Error("Cannot browse outside the session workspace");
+  return { path, cwd };
+}
+
+function threadVirtualPath(cwd, path) {
+  const child = relative(cwd, path);
+  return child ? `/${child}` : "/";
+}
+
 function virtualWorkspacePath(path) {
   const child = relative(sessionRoot, path);
   return child ? `/${child}` : "/";
@@ -200,7 +219,11 @@ async function handleMessage(message) {
     state.activeTurnId = null;
     broadcast("status", publicThreadState(params.threadId), params.threadId);
   }
-  broadcast("codex", message, params.threadId);
+  const item = params.item;
+  const publicMessage = item?.type === "imageGeneration" && typeof item.result === "string" && item.result.length > 100_000
+    ? { ...message, params: { ...params, item: { ...item, result: "" } } }
+    : message;
+  broadcast("codex", publicMessage, params.threadId);
 }
 
 const provider = new CodexProvider({
@@ -380,11 +403,14 @@ async function api(requestObject, response, url) {
   if (requestObject.method === "GET" && url.pathname === "/api/generated-image") {
     const threadId = requiredThreadId(url.searchParams.get("threadId"));
     const requestedPath = url.searchParams.get("path");
+    const requestedFile = url.searchParams.get("file");
     const state = threads.get(threadId);
     const threadWorkspace = state?.snapshot?.cwd;
-    if (!requestedPath || !threadWorkspace) return json(response, 404, { error: "Image not found" });
+    if ((!requestedPath && !requestedFile) || !threadWorkspace) return json(response, 404, { error: "Image not found" });
 
-    const [path, cwd] = await Promise.all([realpath(requestedPath), realpath(threadWorkspace)]);
+    const { path, cwd } = requestedFile
+      ? await resolveThreadWorkspacePath(threadId, requestedFile)
+      : { path: await realpath(requestedPath), cwd: await realpath(threadWorkspace) };
     if (!path.startsWith(`${cwd}/`)) return json(response, 403, { error: "Image is outside this session workspace" });
     if (!(await stat(path)).isFile()) return json(response, 404, { error: "Image not found" });
     const types = {
@@ -404,6 +430,32 @@ async function api(requestObject, response, url) {
     });
     response.end(await readFile(path));
     return;
+  }
+  if (requestObject.method === "GET" && url.pathname === "/api/files") {
+    const threadId = requiredThreadId(url.searchParams.get("threadId"));
+    const { path, cwd } = await resolveThreadWorkspacePath(threadId, url.searchParams.get("path"));
+    if (!(await stat(path)).isDirectory()) return json(response, 400, { error: "Path is not a directory" });
+    const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"]);
+    const allEntries = (await readdir(path, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() || entry.isFile())
+      .sort((left, right) => Number(right.isDirectory()) - Number(left.isDirectory()) || left.name.localeCompare(right.name));
+    const listed = allEntries.slice(0, 500);
+    const entries = await Promise.all(listed.map(async (entry) => {
+      const entryPath = join(path, entry.name);
+      return {
+        name: entry.name,
+        type: entry.isDirectory() ? "directory" : "file",
+        size: entry.isFile() ? (await stat(entryPath)).size : null,
+        image: entry.isFile() && imageExtensions.has(extname(entry.name).toLowerCase()),
+      };
+    }));
+    const virtualPath = threadVirtualPath(cwd, path);
+    return json(response, 200, {
+      path: virtualPath,
+      parent: virtualPath === "/" ? null : dirname(virtualPath),
+      entries,
+      truncated: allEntries.length > listed.length,
+    });
   }
   if (requestObject.method === "GET" && url.pathname === "/api/directories") {
     const path = await resolveSessionDirectory(url.searchParams.get("path"));
@@ -499,7 +551,14 @@ async function api(requestObject, response, url) {
     } catch (error) {
       if (!error.message.includes("not materialized yet")) throw error;
     }
-    return json(response, 200, { ...publicThreadState(threadId), thread: { ...state.snapshot, turns: state.snapshot?.turns || [] } });
+    return json(response, 200, { ...publicThreadState(threadId), thread: { ...state.snapshot, turns: [] } });
+  }
+  if (requestObject.method === "GET" && url.pathname === "/api/turns") {
+    const threadId = requiredThreadId(url.searchParams.get("threadId"));
+    const cursor = url.searchParams.get("cursor") || null;
+    const requestedLimit = Number(url.searchParams.get("limit") || 12);
+    const limit = Number.isSafeInteger(requestedLimit) ? Math.min(36, Math.max(1, requestedLimit)) : 12;
+    return json(response, 200, await provider.listTurns(threadId, cursor, limit));
   }
   if (requestObject.method === "GET" && url.pathname === "/api/models") {
     return json(response, 200, await provider.listModels());
@@ -626,12 +685,10 @@ function handler(access) {
       if (handled !== false) return;
     }
 
-    const pairingAsset = ["/pair.html", "/pair.js"].includes(url.pathname);
+    const pairingAsset = isPairingAsset(url.pathname);
     if (!authEnabled && pairingAsset) return json(response, 404, { error: "Authentication is not enabled" });
     if (pairingAsset && !passkeyAuth.pairingEnabled()) return json(response, 404, { error: "Pairing is not enabled" });
-    const loginAsset = ["/login.html", "/login.js", "/passkey-client.js", "/app.css"].includes(url.pathname);
-    const unauthenticatedAsset = loginAsset || pairingAsset;
-    if (authEnabled && access === "public" && !passkeyAuth.authenticated(requestObject.headers.cookie) && !unauthenticatedAsset) {
+    if (authEnabled && access === "public" && !passkeyAuth.authenticated(requestObject.headers.cookie) && !isUnauthenticatedAsset(url.pathname)) {
       if (url.pathname.startsWith("/api/")) return json(response, 401, { error: "Authentication required" });
       const next = url.pathname === "/" ? "" : `?next=${encodeURIComponent(`${url.pathname}${url.search}`)}`;
       response.writeHead(302, { location: `/login.html${next}` });
